@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="20 30 216 200" width="216" height="200">
+<defs>
+<linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#2F8CFF"/><stop offset="1" stop-color="#A066FF"/></linearGradient>
+<linearGradient id="gd" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#16306E"/><stop offset="1" stop-color="#2A1257"/></linearGradient>
+</defs>
+<polygon points="50,44 100,90 128,82 156,90 206,44 196,136 128,220 60,136" fill="#A066FF" fill-opacity="0.45" transform="translate(8,0)"/>
+<polygon points="50,44 100,90 128,82 156,90 206,44 196,136 128,220 60,136" fill="#2F8CFF" fill-opacity="0.45" transform="translate(-8,0)"/>
+<polygon points="50,44 100,90 128,82 156,90 206,44 196,136 128,220 60,136" fill="url(#gd)" stroke="url(#g)" stroke-width="5" stroke-linejoin="round"/>
+<polygon points="84,128 118,138 110,148 88,142" fill="#D6E6FF"/>
+<polygon points="172,128 138,138 146,148 168,142" fill="#D6E6FF"/>
+<polygon points="118,190 138,190 128,204" fill="#D6E6FF"/>
+<rect x="30" y="100" width="70" height="6" fill="#2F8CFF"/>
+<rect x="170" y="164" width="64" height="6" fill="#A066FF"/>
+<rect x="150" y="70" width="40" height="4" fill="#D6E6FF" fill-opacity="0.8"/>
+<rect x="44" y="176" width="40" height="4" fill="#D6E6FF" fill-opacity="0.8"/>
+</svg>

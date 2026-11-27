@@ -1,0 +1,58 @@
+<?xml version="1.0"?>
+<!--
+	CyberFox splash (Plasma Circuit). Based on the OrangeFox splash by the OrangeFox Team.
+	Backdrop: Splash/user.png (circuit grid + plasma halo), logo: Glitch Fox.
+-->
+<recovery>
+	<details>
+		<resolution width="1080" h="1920"/>
+		<themeversion>3</themeversion>
+	</details>
+
+	<resources>
+		<image name="splash_bg" filename="Splash/user" retainaspect="1"/>
+		<image name="splash_glow" filename="Cyber/logo_glow" retainaspect="1"/>
+		<image name="splash_logo" filename="SVG/Logos/logo_o.svg" retainaspect="1" scale="2.0"/>
+		<font name="of" filename="Rajdhani-Bold.ttf" size="120"/>
+		<font name="recovery" filename="Rajdhani-Medium.ttf" size="46"/>
+	</resources>
+
+	<variables>
+		<variable name="of" value="%center_y%+380"/>
+		<variable name="rec" value="%center_y%+500"/>
+		<variable name="background_color" value="#000000"/>
+	</variables>
+
+	<pages>
+		<page name="splash">
+			<background color="%background_color%"/>
+
+			<image>
+				<image resource="splash_bg"/>
+				<placement x="540" y="%center_y%" placement="4"/>
+			</image>
+
+			<image>
+				<image resource="splash_glow"/>
+				<placement x="540" y="%center_y%" placement="4"/>
+			</image>
+
+			<image>
+				<image resource="splash_logo"/>
+				<placement x="540" y="%center_y%" placement="4"/>
+			</image>
+
+			<text>
+				<placement x="540" y="%of%" placement="4"/>
+				<font resource="of" color="#5AA6FF"/>
+				<text>C Y B E R F O X</text>
+			</text>
+
+			<text>
+				<placement x="540" y="%rec%" placement="4"/>
+				<font resource="recovery" color="#7F95C8"/>
+				<text>R E C O V E R Y</text>
+			</text>
+		</page>
+	</pages>
+</recovery>

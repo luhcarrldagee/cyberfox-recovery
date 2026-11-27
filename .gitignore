@@ -1,0 +1,6 @@
+dist/
+__pycache__/
+*.pyc
+previews/out/_*.html
+branding/png/_*.html
+cyberfox_previews.zip

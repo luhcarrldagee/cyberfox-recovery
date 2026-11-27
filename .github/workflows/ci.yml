@@ -1,0 +1,33 @@
+name: CI
+on:
+  push:
+  pull_request:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Lint shell
+        run: |
+          pip install shellcheck-py
+          shellcheck -s sh -S warning zips/cfx.sh zips/update-binary
+          shellcheck -S warning tools/build_zips.sh tools/integrate.sh tools/build.sh tools/test_zips.sh
+      - name: Lab page is up to date
+        run: |
+          python3 tools/gen_lab_page.py
+          git diff --exit-code theme/overlay/portrait_hdpi/pages/cyberfox.xml
+      - name: Build and test tool zips
+        run: |
+          bash tools/build_zips.sh
+          bash tools/test_zips.sh
+      - name: Theme applies cleanly to OrangeFox fox_16.0
+        run: |
+          pip install pillow
+          git clone --depth 1 -b fox_16.0 https://gitlab.com/OrangeFox/bootable/Recovery.git /tmp/rec
+          python3 tools/apply_theme.py --theme-dir /tmp/rec/gui/theme
+          test "$(python3 tools/apply_theme.py --theme-dir /tmp/rec/gui/theme | head -1)" = "CyberFox theme: 0 files changed"
+          python3 -c "import xml.dom.minidom as m; m.parse('/tmp/rec/gui/theme/portrait_hdpi/pages/cyberfox.xml')"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cyberfox-lab-zips
+          path: dist/zips/

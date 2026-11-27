@@ -1,0 +1,82 @@
+{
+  "_comment": "Single source of truth for the CyberFox Lab tools. tools/build_zips.sh builds one flashable zip per entry; tools/gen_lab_page.py builds the Lab page from the same list.",
+  "tools": [
+    {
+      "id": "backup-critical",
+      "zip": "CFX-Backup-Critical",
+      "title": "Backup critical partitions",
+      "icon": "bs_btn_restore",
+      "desc": "boot, vendor_boot, dtbo, vbmeta, efs, persist"
+    },
+    {
+      "id": "restore-critical",
+      "zip": "CFX-Restore-Critical",
+      "title": "Restore critical partitions",
+      "icon": "bs_btn_restore",
+      "desc": "Newest backup to active slot, SHA-256 checked"
+    },
+    {
+      "id": "vault-backup",
+      "zip": "CFX-Vault-Backup",
+      "title": "File Vault: back up my files",
+      "icon": "bs_btn_set_secure",
+      "desc": "Photos, downloads, docs, music to USB-OTG"
+    },
+    {
+      "id": "vault-restore",
+      "zip": "CFX-Vault-Restore",
+      "title": "File Vault: restore my files",
+      "icon": "bs_btn_set_secure",
+      "desc": "Newest vault back to storage, fixes owners"
+    },
+    {
+      "id": "avb-disable",
+      "zip": "CFX-Disable-AVB",
+      "title": "Disable AVB / verity",
+      "icon": "bs_btn_set_global",
+      "desc": "Patches vbmeta on both slots (may need Format)"
+    },
+    {
+      "id": "slot-switch",
+      "zip": "CFX-Switch-Slot",
+      "title": "Switch active slot",
+      "icon": "bs_btn_set_screen",
+      "desc": "Marks the other A/B slot active for next boot"
+    },
+    {
+      "id": "rescue-modules",
+      "zip": "CFX-Rescue-Bootloop",
+      "title": "Bootloop rescue",
+      "icon": "bs_btn_set_vibro",
+      "desc": "Disables all Magisk / KernelSU / APatch modules"
+    },
+    {
+      "id": "enable-modules",
+      "zip": "CFX-Reenable-Modules",
+      "title": "Re-enable modules",
+      "icon": "bs_btn_set_vibro",
+      "desc": "Undoes Bootloop rescue only"
+    },
+    {
+      "id": "clean-caches",
+      "zip": "CFX-Clean-Caches",
+      "title": "Clean caches",
+      "icon": "bs_btn_set_regional",
+      "desc": "dalvik, package and /data/cache; keeps data"
+    },
+    {
+      "id": "restore-stock-recovery",
+      "zip": "CFX-Restore-Stock-Recovery",
+      "title": "Restore stock recovery",
+      "icon": "bs_btn_set_ota",
+      "desc": "Saved stock vendor_boot to both slots"
+    },
+    {
+      "id": "report",
+      "zip": "CFX-Device-Report",
+      "title": "Device report",
+      "icon": "bs_btn_set_about",
+      "desc": "Props, partitions, mounts, logs to Reports"
+    }
+  ]
+}

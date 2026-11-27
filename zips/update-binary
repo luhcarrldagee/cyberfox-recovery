@@ -1,0 +1,19 @@
+#!/sbin/sh
+# CyberFox Lab zip installer. Runs cfx.sh with the tool id stored in cfx.cmd.
+OUTFD="$2"
+ZIPFILE="$3"
+export OUTFD ZIPFILE
+
+ui_print() { printf 'ui_print %s\nui_print\n' "$1" >&"$OUTFD"; }
+
+W=/tmp/cfx
+rm -rf "$W"
+mkdir -p "$W"
+unzip -o "$ZIPFILE" cfx.sh cfx.cmd -d "$W" >/dev/null 2>&1 || { ui_print "CyberFox: cannot unpack zip"; exit 1; }
+chmod 0755 "$W/cfx.sh"
+TOOL="$(head -n 1 "$W/cfx.cmd" | tr -d '\r\n ')"
+
+sh "$W/cfx.sh" "$TOOL"
+RC=$?
+rm -rf "$W"
+exit $RC
