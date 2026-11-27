@@ -57,7 +57,8 @@ DT="$TOP/device/google/pixels"
 
 say "Device-tree maintainer patches"
 if [ -f "$DT/patches/apply_patches.py" ]; then
-  python3 "$DT/patches/apply_patches.py" --apply --root "$TOP"
+  python3 "$DT/patches/apply_patches.py" --apply --root "$TOP" \
+    || echo "[cyberfox] WARNING: some maintainer patches did not apply (see log above); continuing"
 fi
 
 say "Applying CyberFox theme"

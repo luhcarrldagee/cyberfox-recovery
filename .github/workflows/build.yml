@@ -1,0 +1,82 @@
+name: Build CyberFox recovery
+on:
+  workflow_dispatch:
+    inputs:
+      build_type:
+        description: "Beta (adb + MTP on) or Stable"
+        default: Beta
+        type: choice
+        options: [Beta, Stable]
+permissions:
+  contents: write
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 360
+    steps:
+      - name: Maximize disk space
+        uses: easimon/maximize-build-space@v10
+        with:
+          root-reserve-mb: 6144
+          swap-size-mb: 12288
+          remove-dotnet: "true"
+          remove-android: "true"
+          remove-haskell: "true"
+          remove-codeql: "true"
+          remove-docker-images: "true"
+          build-mount-path: /home/runner/src
+
+      - uses: actions/checkout@v4
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y git-core gnupg flex bison build-essential zip unzip curl zlib1g-dev \
+            libc6-dev-i386 x11proto-core-dev libx11-dev lib32z1-dev libgl1-mesa-dev libxml2-utils \
+            xsltproc fontconfig python3 python3-pip python-is-python3 python3-pil rsync bc lz4 cpio \
+            libssl-dev ccache jq
+          mkdir -p ~/bin
+          curl -fsSL https://storage.googleapis.com/git-repo-downloads/repo -o ~/bin/repo
+          chmod +x ~/bin/repo
+          echo "$HOME/bin" >> "$GITHUB_PATH"
+          git config --global user.name "CyberFox CI"
+          git config --global user.email "ci@cyberfox.invalid"
+          git config --global color.ui false
+          df -h /home/runner/src; free -g; nproc
+
+      - name: Sync, patch and build
+        run: |
+          set -o pipefail
+          args=(--top /home/runner/src/fox --sync)
+          [ "${{ inputs.build_type }}" = "Stable" ] && args+=(--stable)
+          bash tools/build.sh "${args[@]}" 2>&1 | tee build.log
+          df -h /home/runner/src
+
+      - name: Upload build log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-log
+          path: |
+            build.log
+            /home/runner/src/fox/out/error.log
+          if-no-files-found: ignore
+
+      - name: Upload recovery
+        uses: actions/upload-artifact@v4
+        with:
+          name: cyberfox-recovery
+          path: |
+            dist/CyberFox-*
+            dist/SHA256SUMS-recovery
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          bash tools/build_zips.sh
+          (cd dist/zips && zip -q ../CyberFox-Lab-Tool-Zips.zip ./*.zip SHA256SUMS)
+          tag="build-$(date -u +%Y%m%d-%H%M)"
+          gh release create "$tag" dist/CyberFox-* dist/SHA256SUMS-recovery dist/CyberFox-Lab-Tool-Zips.zip \
+            --title "CyberFox ${{ inputs.build_type }} $tag" \
+            --notes "CyberFox Recovery for Pixel 6a (bluejay), built from OrangeFox fox_16.0 and leegarchat/twrp_device_google_pixels R12_16. Install with docs/INSTALL.md: unzip, run install-desktop.sh in fastboot, wait for RESULT: OK, then fastboot reboot recovery. Keep your stock vendor_boot.img for rollback."
