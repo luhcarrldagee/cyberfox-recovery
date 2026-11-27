@@ -17,8 +17,8 @@ jobs:
       - name: Maximize disk space
         uses: easimon/maximize-build-space@v10
         with:
-          root-reserve-mb: 6144
-          swap-size-mb: 12288
+          root-reserve-mb: 10240
+          swap-size-mb: 24576
           remove-dotnet: "true"
           remove-android: "true"
           remove-haskell: "true"
@@ -44,13 +44,33 @@ jobs:
           git config --global color.ui false
           df -h /home/runner/src; free -g; nproc
 
-      - name: Sync, patch and build
+      - name: Move /tmp onto the build volume
+        run: |
+          sudo mkdir -p /home/runner/src/tmp && sudo chmod 1777 /home/runner/src/tmp
+          sudo mount --bind /home/runner/src/tmp /tmp
+          df -h / /tmp /home/runner/src; free -g
+
+      - name: Sync and patch
         run: |
           set -o pipefail
-          args=(--top /home/runner/src/fox --sync)
-          [ "${{ inputs.build_type }}" = "Stable" ] && args+=(--stable)
-          bash tools/build.sh "${args[@]}" 2>&1 | tee build.log
-          df -h /home/runner/src
+          ( while true; do echo "[mon $(date -u +%H:%M)] $(df -h --output=avail /home/runner/src / | tail -2 | tr -s ' \n' ' ') mem: $(free -m | awk '/Mem/{print $7"MB avail"}') swap: $(free -m | awk '/Swap/{print $3"MB used"}')"; sleep 120; done ) &
+          bash tools/build.sh --top /home/runner/src/fox --sync --prepare 2>&1 | tee sync.log
+          du -sh /home/runner/src/fox; df -h /home/runner/src
+
+      - name: Compile
+        run: |
+          set -o pipefail
+          ( while true; do echo "[mon $(date -u +%H:%M)] $(df -h --output=avail /home/runner/src / | tail -2 | tr -s ' \n' ' ') mem: $(free -m | awk '/Mem/{print $7"MB avail"}') swap: $(free -m | awk '/Swap/{print $3"MB used"}')"; sleep 120; done ) &
+          cd /home/runner/src/fox/device/google/pixels
+          ./build.sh -n CyberFox --build-type "${{ inputs.build_type }}" --no-patches -j 4 2>&1 | tee "$GITHUB_WORKSPACE/build.log"
+
+      - name: Collect artifacts
+        run: |
+          mkdir -p dist
+          for f in /home/runner/src/fox/device/google/pixels/builds/OrangeFox-*-CyberFox-aio.*; do
+            b="$(basename "$f")"; cp "$f" "dist/${b/OrangeFox-/CyberFox-}"
+          done
+          ls dist/CyberFox-* && (cd dist && sha256sum CyberFox-*-aio.* > SHA256SUMS-recovery)
 
       - name: Upload build log
         if: always()
@@ -58,6 +78,7 @@ jobs:
         with:
           name: build-log
           path: |
+            sync.log
             build.log
             /home/runner/src/fox/out/error.log
           if-no-files-found: ignore
