@@ -9,6 +9,7 @@ on:
         options: [Beta, Stable]
 permissions:
   contents: write
+  issues: write
 jobs:
   build:
     runs-on: ubuntu-24.04
@@ -54,6 +55,7 @@ jobs:
         run: |
           set -o pipefail
           ( while true; do echo "[mon $(date -u +%H:%M)] $(df -h --output=avail /home/runner/src / | tail -2 | tr -s ' \n' ' ') mem: $(free -m | awk '/Mem/{print $7"MB avail"}') swap: $(free -m | awk '/Swap/{print $3"MB used"}')"; sleep 120; done ) &
+          GH_TOKEN=${{ github.token }} bash tools/ci_monitor.sh sync.log "Sync" &
           bash tools/build.sh --top /home/runner/src/fox --sync --prepare 2>&1 | tee sync.log
           du -sh /home/runner/src/fox; df -h /home/runner/src
 
@@ -61,8 +63,9 @@ jobs:
         run: |
           set -o pipefail
           ( while true; do echo "[mon $(date -u +%H:%M)] $(df -h --output=avail /home/runner/src / | tail -2 | tr -s ' \n' ' ') mem: $(free -m | awk '/Mem/{print $7"MB avail"}') swap: $(free -m | awk '/Swap/{print $3"MB used"}')"; sleep 120; done ) &
+          GH_TOKEN=${{ github.token }} bash tools/ci_monitor.sh "$GITHUB_WORKSPACE/build.log" "Compile" &
           cd /home/runner/src/fox/device/google/pixels
-          ./build.sh -n CyberFox --build-type "${{ inputs.build_type }}" --no-patches -j 4 2>&1 | tee "$GITHUB_WORKSPACE/build.log"
+          nice -n 15 ./build.sh -n CyberFox --build-type "${{ inputs.build_type }}" --no-patches -j 3 2>&1 | tee "$GITHUB_WORKSPACE/build.log"
 
       - name: Collect artifacts
         run: |
