@@ -2,9 +2,15 @@ name: CI
 on:
   push:
   pull_request:
+permissions:
+  contents: read
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
 jobs:
   test:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - name: Lint shell
@@ -25,9 +31,11 @@ jobs:
           pip install pillow
           git clone --depth 1 -b fox_16.0 https://gitlab.com/OrangeFox/bootable/Recovery.git /tmp/rec
           python3 tools/apply_theme.py --theme-dir /tmp/rec/gui/theme
-          test "$(python3 tools/apply_theme.py --theme-dir /tmp/rec/gui/theme | head -1)" = "CyberFox theme: 0 files changed"
+          out="$(python3 tools/apply_theme.py --theme-dir /tmp/rec/gui/theme | head -1)"
+          test "$out" = "CyberFox theme: 0 files changed"
           python3 -c "import xml.dom.minidom as m; m.parse('/tmp/rec/gui/theme/portrait_hdpi/pages/cyberfox.xml')"
       - uses: actions/upload-artifact@v4
         with:
           name: cyberfox-lab-zips
           path: dist/zips/
+          if-no-files-found: error
