@@ -1,132 +1,109 @@
-name: Build CyberFox recovery
-on:
-  workflow_dispatch:
-    inputs:
-      build_type:
-        description: "Beta (adb + MTP on) or Stable"
-        default: Beta
-        type: choice
-        options: [Beta, Stable]
-permissions:
-  contents: write
-  issues: write
-concurrency:
-  group: cyberfox-build
-  cancel-in-progress: false
-jobs:
-  build:
-    runs-on: ubuntu-24.04
-    timeout-minutes: 300
-    steps:
-      - name: Free disk space and add swap
-        run: |
-          df -h /
-          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /usr/local/.ghcup \
-            /opt/hostedtoolcache/CodeQL /usr/share/swift /usr/local/share/powershell \
-            /usr/local/share/chromium /usr/local/lib/node_modules /opt/microsoft /opt/google || true
-          sudo docker image prune --all --force >/dev/null 2>&1 || true
-          sudo swapoff -a || true
-          sudo rm -f /mnt/swapfile /swapfile
+#!/usr/bin/env bash
+# CyberFox full pipeline for Pixel 6a (bluejay).
+#
+#   tools/build.sh --top ~/cyberfox_src --sync     # first time: sync OrangeFox 16.0 + device tree, then build
+#   tools/build.sh --top ~/cyberfox_src            # rebuild
+#   tools/build.sh --top ~/cyberfox_src --prepare  # patch everything, skip the long compile
+#   tools/build.sh --top ~/cyberfox_src -j 2       # force a job count (lower = less RAM)
+#
+# Steps
+#   1. (optional) sync OrangeFox fox_16.0 and leegarchat/twrp_device_google_pixels (R12_16)
+#   2. device-tree maintainer patches      (patches/apply_patches.py --apply)
+#   3. CyberFox theme                      (tools/apply_theme.py)
+#   4. Lab zips + cfx engine into ramdisk   (tools/integrate.sh)
+#   5. compile with the device tree's build.sh (--no-patches, step 2 already ran)
+#   6. rename OrangeFox-*-CyberFox-aio.* -> CyberFox-*-aio.* into dist/
+#
+# Needs a Linux x86_64 host with ~100 GB free disk, 16 GB+ RAM (plus swap),
+# and the usual AOSP build packages (see docs/BUILDING.md).
+set -euo pipefail
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+TOP=""; SYNC=0; PREPARE=0; TYPE="Beta"; JOBS=""
+OF_BRANCH="16.0"; DT_BRANCH="R12_16"
+DT_URL="https://github.com/leegarchat/twrp_device_google_pixels.git"
 
-          sudo fallocate -l 24G /swapfile && sudo chmod 600 /swapfile
-          sudo mkswap /swapfile >/dev/null && sudo swapon -p 10 /swapfile
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --top) TOP="$2"; shift 2 ;;
+    --sync) SYNC=1; shift ;;
+    --prepare) PREPARE=1; shift ;;
+    --stable) TYPE="Stable"; shift ;;
+    -j) JOBS="$2"; shift 2 ;;
+    -h|--help) sed -n '2,21p' "$0"; exit 0 ;;
+    *) echo "unknown option $1"; exit 2 ;;
+  esac
+done
+[ -n "$TOP" ] || { echo "--top <dir> is required"; exit 2; }
+mkdir -p "$TOP"; TOP="$(cd "$TOP" && pwd)"
+say() { printf '\n\033[1;34m[cyberfox]\033[0m %s\n' "$1"; }
 
-          sudo modprobe zram || true
-          if [ -e /sys/block/zram0 ]; then
-            echo zstd | sudo tee /sys/block/zram0/comp_algorithm >/dev/null || true
-            echo 12G  | sudo tee /sys/block/zram0/disksize >/dev/null
-            sudo mkswap /dev/zram0 >/dev/null && sudo swapon -p 100 /dev/zram0
-          fi
-          sudo sysctl vm.swappiness=100 vm.vfs_cache_pressure=200
+# ---- memory-aware defaults (only used when the caller has not set them) ----
+mem_gb="$(awk '/MemTotal/{print int($2/1048576)}' /proc/meminfo)"
+swap_gb="$(awk '/SwapTotal/{print int($2/1048576)}' /proc/meminfo)"
+cpus="$(nproc)"
+if [ -z "$JOBS" ]; then
+  JOBS=$(( mem_gb / 6 )); [ "$JOBS" -ge 1 ] || JOBS=1
+  [ "$JOBS" -le "$cpus" ] || JOBS="$cpus"
+fi
+export GOGC="${GOGC:-25}"
+export GOMEMLIMIT="${GOMEMLIMIT:-$(( mem_gb * 60 / 100 ))GiB}"
+export NINJA_ARGS="${NINJA_ARGS:--j$JOBS}"
+export ALLOW_MISSING_DEPENDENCIES="${ALLOW_MISSING_DEPENDENCIES:-true}"
+say "RAM ${mem_gb}G, swap ${swap_gb}G, cpus ${cpus} -> jobs ${JOBS}, GOMEMLIMIT ${GOMEMLIMIT}, GOGC ${GOGC}"
+if [ $(( mem_gb + swap_gb )) -lt 32 ]; then
+  echo "[cyberfox] WARNING: RAM+swap is under 32 GB. Soong analysis may be OOM-killed. Add swap or use a bigger machine."
+fi
 
-          sudo mkdir -p /home/runner/src && sudo chown runner:runner /home/runner/src
-          df -h /; free -g; swapon --show
-          avail=$(df --block-size=1G --output=avail / | tail -1)
-          echo "Free on /: ${avail} GB"
-          [ "$avail" -ge 75 ] || { echo "Not enough disk for a full sync and build"; exit 1; }
+if [ "$SYNC" = 1 ]; then
+  say "Syncing OrangeFox $OF_BRANCH into $TOP"
+  command -v repo >/dev/null || { echo "install 'repo' first (docs/BUILDING.md)"; exit 1; }
+  tmp="$(mktemp -d)"
+  git clone --depth 1 https://gitlab.com/OrangeFox/sync.git "$tmp/sync"
+  (cd "$tmp/sync" && ./orangefox_sync.sh --branch "$OF_BRANCH" --path "$TOP")
+  rm -rf "$tmp"
+  if [ ! -d "$TOP/device/google/pixels/.git" ]; then
+    say "Cloning Pixel AIO device tree ($DT_BRANCH)"
+    git clone -b "$DT_BRANCH" "$DT_URL" "$TOP/device/google/pixels"
+  else
+    git -C "$TOP/device/google/pixels" pull --ff-only
+  fi
+fi
 
-      - uses: actions/checkout@v4
+[ -d "$TOP/bootable/recovery/gui/theme" ] || { echo "$TOP has no OrangeFox source - run with --sync"; exit 1; }
+DT="$TOP/device/google/pixels"
+[ -x "$DT/build.sh" ] || { echo "device tree missing at $DT - run with --sync"; exit 1; }
 
-      - name: Install build dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y git-core gnupg flex bison build-essential zip unzip curl zlib1g-dev \
-            libc6-dev-i386 x11proto-core-dev libx11-dev lib32z1-dev libgl1-mesa-dev libxml2-utils \
-            xsltproc fontconfig python3 python3-pip python-is-python3 python3-pil rsync bc lz4 cpio \
-            libssl-dev ccache jq
-          mkdir -p ~/bin
-          curl -fsSL https://storage.googleapis.com/git-repo-downloads/repo -o ~/bin/repo
-          chmod +x ~/bin/repo
-          echo "$HOME/bin" >> "$GITHUB_PATH"
-          git config --global user.name "CyberFox CI"
-          git config --global user.email "ci@cyberfox.invalid"
-          git config --global color.ui false
-          df -h /home/runner/src; free -g; nproc
+say "Device-tree maintainer patches"
+if [ -f "$DT/patches/apply_patches.py" ]; then
+  python3 "$DT/patches/apply_patches.py" --apply --root "$TOP" \
+    || echo "[cyberfox] WARNING: some maintainer patches did not apply (see log above); continuing"
+fi
 
-      - name: Sync and patch
-        run: |
-          set -o pipefail
-          ( while true; do echo "[mon $(date -u +%H:%M)] $(df -h --output=avail /home/runner/src / | tail -2 | tr -s ' \n' ' ') mem: $(free -m | awk '/Mem/{print $7"MB avail"}') swap: $(free -m | awk '/Swap/{print $3"MB used"}')"; sleep 120; done ) &
-          GH_TOKEN=${{ github.token }} bash tools/ci_monitor.sh sync.log "Sync" &
-          bash tools/build.sh --top /home/runner/src/fox --sync --prepare 2>&1 | tee sync.log
-          du -sh /home/runner/src/fox; df -h /home/runner/src
+say "Applying CyberFox theme"
+python3 "$ROOT/tools/apply_theme.py" --top "$TOP"
 
-      - name: Compile
-        run: |
-          set -o pipefail
-          ( while true; do echo "[mon $(date -u +%H:%M)] $(df -h --output=avail /home/runner/src / | tail -2 | tr -s ' \n' ' ') mem: $(free -m | awk '/Mem/{print $7"MB avail"}') swap: $(free -m | awk '/Swap/{print $3"MB used"}')"; sleep 120; done ) &
-          GH_TOKEN=${{ github.token }} bash tools/ci_monitor.sh "$GITHUB_WORKSPACE/build.log" "Compile" &
+say "Integrating CyberFox Lab zips"
+bash "$ROOT/tools/integrate.sh" "$TOP"
 
-          export GOGC=25
-          export GOMEMLIMIT=10GiB
-          export _JAVA_OPTIONS="-Xmx3g"
-          export NINJA_ARGS="-j2"
-          export ALLOW_MISSING_DEPENDENCIES=true
+if [ "$PREPARE" = 1 ]; then
+  say "Prepared. Compile with: cd $DT && ./build.sh -n CyberFox --build-type $TYPE --no-patches -j $JOBS"
+  exit 0
+fi
 
-          cd /home/runner/src/fox/device/google/pixels
-          nice -n 15 ./build.sh -n CyberFox --build-type "${{ inputs.build_type }}" --no-patches -j 2 2>&1 | tee "$GITHUB_WORKSPACE/build.log"
+say "Compiling (this takes a while)"
+args=(-n CyberFox --build-type "$TYPE" --no-patches -j "$JOBS")
+(cd "$DT" && nice -n 15 ./build.sh "${args[@]}")
 
-      - name: Memory diagnostics on failure
-        if: failure() || cancelled()
-        run: |
-          free -h; swapon --show
-          sudo dmesg | grep -i -E "out of memory|oom|killed process" | tail -20 || true
-
-      - name: Collect artifacts
-        run: |
-          mkdir -p dist
-          for f in /home/runner/src/fox/device/google/pixels/builds/OrangeFox-*-CyberFox-aio.*; do
-            b="$(basename "$f")"; cp "$f" "dist/${b/OrangeFox-/CyberFox-}"
-          done
-          ls dist/CyberFox-* && (cd dist && sha256sum CyberFox-*-aio.* > SHA256SUMS-recovery)
-
-      - name: Upload build log
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: build-log
-          path: |
-            sync.log
-            build.log
-            /home/runner/src/fox/out/error.log
-          if-no-files-found: ignore
-
-      - name: Upload recovery
-        uses: actions/upload-artifact@v4
-        with:
-          name: cyberfox-recovery
-          path: |
-            dist/CyberFox-*
-            dist/SHA256SUMS-recovery
-          if-no-files-found: error
-
-      - name: Publish release
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          bash tools/build_zips.sh
-          (cd dist/zips && zip -q ../CyberFox-Lab-Tool-Zips.zip ./*.zip SHA256SUMS)
-          tag="build-$(date -u +%Y%m%d-%H%M)"
-          gh release create "$tag" dist/CyberFox-* dist/SHA256SUMS-recovery dist/CyberFox-Lab-Tool-Zips.zip \
-            --title "CyberFox ${{ inputs.build_type }} $tag" \
-            --notes "CyberFox Recovery for Pixel 6a (bluejay), built from OrangeFox fox_16.0 and leegarchat/twrp_device_google_pixels R12_16. Install with docs/INSTALL.md: unzip, run install-desktop.sh in fastboot, wait for RESULT: OK, then fastboot reboot recovery. Keep your stock vendor_boot.img for rollback."
+say "Collecting artifacts"
+mkdir -p "$ROOT/dist"
+found=0
+for f in "$DT"/builds/OrangeFox-*-CyberFox-aio.*; do
+  [ -e "$f" ] || continue
+  b="$(basename "$f")"
+  cp "$f" "$ROOT/dist/${b/OrangeFox-/CyberFox-}"
+  echo "  dist/${b/OrangeFox-/CyberFox-}"
+  found=1
+done
+[ "$found" = 1 ] || { echo "no build output found in $DT/builds"; exit 1; }
+(cd "$ROOT/dist" && sha256sum CyberFox-*-aio.* > SHA256SUMS-recovery)
+say "Done. Flash with docs/INSTALL.md (unzip, run install-desktop.sh in fastboot)."
